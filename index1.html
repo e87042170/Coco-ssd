@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>cocossd test</title>
+    <!-- TensorFlow.js Core -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs">
+    </script>
+    <!-- TensorFlow.js mobilenet model -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd">
+    </script>
+    <style>
+        img {
+            width: 800px;
+            height: 600px;
+            display: none;
+        }
+
+    </style>
+</head>
+
+<body>  
+    <h1>測試物件辨識</h1>
+    <img id="detect_img" crossorigin src="./images-1/image2-1.jpg" />
+    <canvas id="detect_result"></canvas>
+    <script>
+        const color=["green","yellow","red"]
+        async function app() {
+            const model = await cocoSsd.load();
+            const img = document.getElementById('detect_img');
+            const result = await model.detect(img);
+            const canvas = document.getElementById('detect_result');
+            canvas.width=img.naturalWidth;
+            canvas.height=img.naturalHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(img, 0, 0);
+            context.font = '14px Arial';
+            
+            for (let i = 0; i < result.length; i++) {
+                context.beginPath();
+                //three dots mean spread over object get all its properties
+                context.rect(...result[i].bbox);
+                context.lineWidth = 2;
+                context.strokeStyle = color[i%3];
+                context.fillStyle = color[i%3];
+                context.stroke();
+                context.fillText(
+                    result[i].score.toFixed(3) + ' ' + result[i].class, 
+                    result[i].bbox[0],
+                    result[i].bbox[1] - 5);
+            }
+            console.log('result: ', result);
+        }
+        app();
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>cocossd test</title>
+
+    </script>
+    <style>
+        img {
+            width: 800px;
+            height: 600px;
+            display: none;
+        }
+
+    </style>
+</head>
+
+<body>  
+    <h1>測試物件辨識</h1>
+    <img id="detect_img" crossorigin src="./images-1/image2-1.jpg" />
+    <canvas id="detect_result"></canvas>
+    <script>
+        // const color=["green","yellow","red"]
+        // async function app() {
+        //     const model = await cocoSsd.load();
+        //     const img = document.getElementById('detect_img');
+        //     const result = await model.detect(img);
+        //     const canvas = document.getElementById('detect_result');
+        //     canvas.width=img.naturalWidth;
+        //     canvas.height=img.naturalHeight;
+        //     const context = canvas.getContext('2d');
+        //     context.drawImage(img, 0, 0);
+        //     context.font = '14px Arial';
+            
+        //     for (let i = 0; i < result.length; i++) {
+        //         context.beginPath();
+        //         //three dots mean spread over object get all its properties
+        //         context.rect(...result[i].bbox);
+        //         context.lineWidth = 2;
+        //         context.strokeStyle = color[i%3];
+        //         context.fillStyle = color[i%3];
+        //         context.stroke();
+        //         context.fillText(
+        //             result[i].score.toFixed(3) + ' ' + result[i].class, 
+        //             result[i].bbox[0],
+        //             result[i].bbox[1] - 5);
+        //     }
+        //     console.log('result: ', result);
+        // }
+        // app();
+        const img = document.getElementById('detect_img');
+        const canvas = document.getElementById('detect_result');
+        canvas.width=img.naturalWidth;
+        canvas.height=img.naturalHeight;
+        const context = canvas.getContext('2d');
+        var ImageData;
+        
+        //img.onload 等圖檔已載入再讀取圖檔
+        img.onload = function(){
+            context.drawImage(img, 0, 0);
+            ImageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            //imgSliding(-100);
+            //平均值灰階
+            grayscaleImage('avg');
+            //取得直方圖資料
+            var histo = gethistogram();
+            //取得大津閾值
+            var th = otsu(histo);
+            console.log("otsu th = "+th);
+            //使用閾值二值化
+            binarizationImage(th)
+
+            context.putImageData(ImageData, 0, 0);
+        };        
+
+        function imgSliding(val){
+            //var val = parseInt(e.target.value)
+            //var canvas=document.getElementById('img1');
+            //var ctx=context;
+            //var ImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            var data = ImageData.data;
+
+            for (var i = 0; i < data.length; i += 4) {
+                data[i]     = data[i] + val
+                data[i + 1] = data[i + 1] + val
+                data[i + 2] = data[i + 2] + val
+
+                data[i]     = data[i]>255?255:data[i]; // red
+                data[i + 1] = data[i+1]>255?255:data[i+1]; // green
+                data[i + 2] = data[i+2]>255?255:data[i+2]; // blue
+
+                data[i]     = data[i]<0?0:data[i]; // red
+                data[i + 1] = data[i+1]<0?0:data[i+1]; // green
+                data[i + 2] = data[i+2]<0?0:data[i+2]; // blue
+            }
+
+        }
+
+        function grayscaleImage(key){
+            //var ctx = context;
+            //var ImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            var data = ImageData.data;
+
+            switch (key) {
+                case 'r':
+                    for (var i = 0; i < data.length; i += 4) {
+                        var avg = data[i];
+                        data[i]     = avg; // red
+                        data[i + 1] = avg; // green
+                        data[i + 2] = avg; // blue
+                    }
+                    break;
+                case 'g':
+                    for (var i = 0; i < data.length; i += 4) {
+                        var avg = data[i+1];
+                        data[i]     = avg; // red
+                        data[i + 1] = avg; // green
+                        data[i + 2] = avg; // blue
+                    }
+                    break;
+                case 'b':
+                    for (var i = 0; i < data.length; i += 4) {
+                        var avg = data[i+2];
+                        data[i]     = avg; // red
+                        data[i + 1] = avg; // green
+                        data[i + 2] = avg; // blue
+                    }
+                    break;    
+                case 'rg':
+                    //紅/綠光比取小的
+                    for (var i = 0; i < data.length; i += 4) {
+                        var avg = data[i]>=data[i+1]?data[i+1]:data[i];
+                        data[i]     = avg; // red
+                        data[i + 1] = avg; // green
+                        data[i + 2] = avg; // blue
+                    }
+                    break;
+                case 'max':
+                    //最大值
+                    for (var i = 0; i < data.length; i += 4) {
+                        var avg = Math.max(data[i],data[i+1],data[i+2]);
+                        data[i]     = avg; // red
+                        data[i + 1] = avg; // green
+                        data[i + 2] = avg; // blue
+                    }
+                    break;
+                case 'min':
+                    //最小值
+                    for (var i = 0; i < data.length; i += 4) {
+                        var avg = Math.min(data[i],data[i+1],data[i+2]);
+                        data[i]     = avg; // red
+                        data[i + 1] = avg; // green
+                        data[i + 2] = avg; // blue
+                    }
+                    break;
+                case 'wa':
+                    //人眼敏感度的加權平均
+                    for (var i = 0; i < data.length; i += 4) {
+                        var avg = 0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
+                        data[i]     = avg; // red
+                        data[i + 1] = avg; // green
+                        data[i + 2] = avg; // blue
+                    }
+                    break;
+                default:
+                    for (var i = 0; i < data.length; i += 4) {
+                        var avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                        data[i]     = avg; // red
+                        data[i + 1] = avg; // green
+                        data[i + 2] = avg; // blue
+                    }
+                    break;
+            }
+            
+        }
+
+        function binarizationImage(th){
+            
+            var data = ImageData.data;
+
+            switch (th) {
+                // case 'otsu':
+                //     var total = data.length/4;
+                //     var histo = gethistogram(ImageData);
+                //     th = otsu(histo,total);
+                //     console.log("otsu th = "+th);
+                //     break;
+                case undefined:
+                    th=127;
+                    break;
+            
+                default:
+                    th=th;
+                    break;
+            }
+            
+            for (var i = 0; i < data.length; i += 4) {
+                data[i]     = data[i]>=th?255:0; // red
+                data[i + 1] = data[i+1]>=th?255:0; // green
+                data[i + 2] = data[i+2]>=th?255:0; // blue
+            }
+
+        }
+
+        function gethistogram(){
+            var data = ImageData.data;
+            var data_arr=[];
+            for (var i = 0; i < 256; i ++) {
+                data_arr[i]=0;
+            }
+
+            for (var i = 0; i < data.length; i += 4) {
+                data_arr[data[i]] = data_arr[data[i]]+1;
+            }
+            return data_arr;
+
+        }
+
+        function otsu(histogram) {
+            var data = ImageData.data;
+            var total = data.length/4;
+            var sum = 0;
+            for (var i = 1; i < 256; ++i)
+                sum += i * histogram[i];
+            var sumB = 0;
+            var wB = 0;
+            var wF = 0;
+            var mB;
+            var mF;
+            var max = 0.0;
+            var between = 0.0;
+            var threshold1 = 0.0;
+            var threshold2 = 0.0;
+            for (var i = 0; i < 256; ++i) {
+                wB += histogram[i];
+                if (wB == 0)
+                    continue;
+                wF = total - wB;
+                if (wF == 0)
+                    break;
+                sumB += i * histogram[i];
+                mB = sumB / wB;
+                mF = (sum - sumB) / wF;
+                between = wB * wF * (mB - mF) * (mB - mF);
+                if ( between >= max ) {
+                    threshold1 = i;
+                    if ( between > max ) {
+                        threshold2 = i;
+                    }
+                    max = between;            
+                }
+            }
+            return ( threshold1 + threshold2 ) / 2.0;
+        }
+
+        
+
+    </script>
+</body>
+
+</html>
